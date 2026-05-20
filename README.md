@@ -21,7 +21,7 @@ No Asterisk and no local HBLink `bridge.py` process are required for the default
 
 ## VoiceRSS / SkyDescribe audio
 
-For higher-quality spoken alerts, use the SkyDescribe-compatible VoiceRSS TTS path. VoiceRSS is used only to create the WAV file; Analog_Bridge and md380-emu still perform the DMR/AMBE encoding step.
+For higher-quality spoken alerts, use the SkyDescribe-compatible VoiceRSS TTS path. VoiceRSS is used only to create the WAV file; Analog_Bridge and md380-emu still perform the DMR/AMBE encoding step.  https://www.voicerss.org/
 
 ```yaml
 SkyDescribe:
