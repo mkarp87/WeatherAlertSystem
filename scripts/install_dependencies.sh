@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env bash 
 set -euo pipefail
 
 ADD_DVSWITCH_REPO=1
