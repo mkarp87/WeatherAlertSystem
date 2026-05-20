@@ -35,7 +35,7 @@ tts:
   backend: voice_rss
 ```
 
-The app sends VoiceRSS `hl`, `v`, `r`, `c=WAV`, and `f=8khz_16bit_mono`, then streams the resulting WAV into the managed bridge chain. Use `tts.backend: espeak` if the system must operate without internet access.
+The app sends VoiceRSS `hl`, `v`, `r`, `c=WAV`, and `f=8khz_16bit_mono`, then streams the resulting WAV into the managed bridge chain. Use `tts.backend: espeak` if the system must operate without a VoiceRSS account.
 
 ## Install
 
