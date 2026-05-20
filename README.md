@@ -45,7 +45,6 @@ On a Debian/Ubuntu-style system:
 cd /opt
 git clone https://github.com/mkarp87/WeatherAlertSystem.git
 cd WeatherAlertSystem
-chmod +x install.sh
 sudo ./install.sh
 ```
 
