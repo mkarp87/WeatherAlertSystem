@@ -4,9 +4,11 @@ from dataclasses import dataclass, replace
 import hashlib
 import hmac
 import logging
+import os
 from pathlib import Path
 import random
 import shlex
+import signal
 import socket
 import subprocess
 import threading
@@ -397,6 +399,8 @@ class ManagedOpenBridgeSupervisor:
     def start(self) -> None:
         if self.started:
             return
+        if self.cfg.output.managed_openbridge.cleanup_stale_helpers:
+            self.cleanup_stale_helpers()
         self._ensure_openbridge()
         self._ensure_effective_ports()
         self._start_forwarders()
@@ -445,6 +449,84 @@ class ManagedOpenBridgeSupervisor:
             self.openbridge.close()
             self.openbridge = None
         self.started = False
+
+
+    def cleanup_stale_helpers(self) -> int:
+        """Terminate stale helper processes owned by this app instance.
+
+        Older releases and manual foreground runs could leave MMDVM_Bridge,
+        Analog_Bridge, or md380-emu/qemu processes behind. The MMDVM and
+        Analog_Bridge commands include this app's generated state/bridges path.
+        The md380-emu command does not, so that match is limited to the current
+        configured internal port range.
+        """
+        state_bridges = str((self.cfg.app.state_file.parent / "bridges").resolve())
+        mob = self.cfg.output.managed_openbridge
+        allocator = mob.port_allocator
+        md380_ports = {str(allocator.md380emu_base + (slot * allocator.md380emu_step)) for slot in range(allocator.scan_limit)}
+        current_pid = os.getpid()
+        candidates: list[tuple[int, str]] = []
+
+        for proc_dir in Path("/proc").iterdir():
+            if not proc_dir.name.isdigit():
+                continue
+            pid = int(proc_dir.name)
+            if pid == current_pid:
+                continue
+            try:
+                raw = (proc_dir / "cmdline").read_bytes()
+            except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
+                continue
+            if not raw:
+                continue
+            parts = [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+            cmdline = " ".join(parts)
+            if not cmdline:
+                continue
+            if state_bridges in cmdline and ("MMDVM_Bridge" in cmdline or "Analog_Bridge" in cmdline):
+                candidates.append((pid, cmdline))
+                continue
+            if "md380-emu" in cmdline and ("qemu-arm-static" in cmdline or "/opt/md380-emu/md380-emu" in cmdline):
+                for index, part in enumerate(parts):
+                    if part == "-S" and index + 1 < len(parts) and parts[index + 1] in md380_ports:
+                        candidates.append((pid, cmdline))
+                        break
+
+        if not candidates:
+            return 0
+
+        killed = 0
+        for pid, cmdline in candidates:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                killed += 1
+                logger.warning("Terminated stale managed helper PID %s: %s", pid, cmdline)
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied terminating stale managed helper PID %s: %s", pid, cmdline)
+
+        deadline = time.monotonic() + 3.0
+        remaining = {pid for pid, _cmdline in candidates}
+        while remaining and time.monotonic() < deadline:
+            for pid in list(remaining):
+                if not Path(f"/proc/{pid}").exists():
+                    remaining.remove(pid)
+            if remaining:
+                time.sleep(0.1)
+
+        for pid, cmdline in candidates:
+            if not Path(f"/proc/{pid}").exists():
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                logger.warning("Killed stale managed helper PID %s after timeout: %s", pid, cmdline)
+            except ProcessLookupError:
+                continue
+            except PermissionError:
+                logger.warning("Permission denied killing stale managed helper PID %s: %s", pid, cmdline)
+
+        return killed
 
     def forwarder_for(self, group_name: str) -> HBPForwarder | None:
         for forwarder in self.forwarders:

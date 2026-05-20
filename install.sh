@@ -76,13 +76,19 @@ pip install --no-build-isolation -e .
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
-mkdir -p "$APP_DIR/state/audio" "$APP_DIR/state/bridges" "$APP_DIR/state/control"
+
+# Runtime files are written by the service user. Existing installs may have
+# root-owned state files from manual testing, so force ownership/permissions
+# every time install.sh runs. This prevents PermissionError on state load.
+mkdir -p "$APP_DIR/state/audio" "$APP_DIR/state/bridges" "$APP_DIR/state/control" "$APP_DIR/state/control/failed"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/state"
+chmod -R u+rwX,g+rwX "$APP_DIR/state"
 
 if [ ! -f "$APP_DIR/config.yaml" ]; then
   cp "$APP_DIR/config.example.yaml" "$APP_DIR/config.yaml"
-  chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/config.yaml"
 fi
+chown "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/config.yaml"
+chmod u+rw,g+r "$APP_DIR/config.yaml"
 
 cat >/etc/systemd/system/weather-alert-system.service <<EOF_SERVICE
 [Unit]
@@ -98,6 +104,8 @@ WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/.venv/bin/weather-alert-system -c $APP_DIR/config.yaml run
 Restart=on-failure
 RestartSec=10
+KillMode=control-group
+TimeoutStopSec=20
 NoNewPrivileges=true
 PrivateTmp=true
 

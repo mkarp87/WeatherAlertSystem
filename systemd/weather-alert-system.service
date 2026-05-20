@@ -11,6 +11,8 @@ WorkingDirectory=/opt/WeatherAlertSystem
 ExecStart=/opt/WeatherAlertSystem/.venv/bin/weather-alert-system -c /opt/WeatherAlertSystem/config.yaml run
 Restart=on-failure
 RestartSec=10
+KillMode=control-group
+TimeoutStopSec=20
 NoNewPrivileges=true
 PrivateTmp=true
 

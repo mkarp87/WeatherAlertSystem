@@ -53,3 +53,8 @@ The test starts a local UDP listener, simulates the Homebrew/MMDVM login that MM
 - valid HMAC-SHA1 using the configured passphrase
 
 This verifies the embedded OpenBridge egress code without sending packets to the production remote listener.
+
+
+### Stale helper cleanup
+
+Weather Alert System starts one managed Analog_Bridge, MMDVM_Bridge, and md380-emu helper chain per enabled group. On startup it cleans stale helper processes that reference its generated `state/bridges` directory, and the systemd unit uses `KillMode=control-group` so child helpers stop with the service. This behavior is enabled by default with `output.managed_openbridge.cleanup_stale_helpers: true`.

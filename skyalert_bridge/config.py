@@ -286,6 +286,7 @@ class ManagedOpenBridgePortAllocatorConfig:
 class ManagedOpenBridgeConfig:
     enabled: bool
     start_helpers: bool
+    cleanup_stale_helpers: bool
     hbp_bind_ip: str
     hbp_password: str
     startup_delay_seconds: float
@@ -466,6 +467,7 @@ def _parse_managed_openbridge(raw: dict[str, Any]) -> ManagedOpenBridgeConfig:
     return ManagedOpenBridgeConfig(
         enabled=_bool(raw.get("enabled", True)),
         start_helpers=_bool(raw.get("start_helpers", True)),
+        cleanup_stale_helpers=_bool(raw.get("cleanup_stale_helpers", True)),
         hbp_bind_ip=str(raw.get("hbp_bind_ip", "127.0.0.1")),
         hbp_password=str(raw.get("hbp_password", "skyalert")),
         startup_delay_seconds=_float(raw.get("startup_delay_seconds", 5.0), "output.managed_openbridge.startup_delay_seconds"),

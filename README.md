@@ -228,3 +228,21 @@ The full SkyWarnPlus-compatible list of 128 NWS v1.2 event names is bundled in:
 ```text
 docs/EventTypes.md
 ```
+
+### Repairing state-file permissions
+
+If the service fails with `PermissionError` on `state/skyalert_state.json`, the state directory is owned by the wrong user, usually after running the app manually as root. Fix it with:
+
+```bash
+systemctl stop weather-alert-system || true
+chown -R skyalert:skyalert /opt/WeatherAlertSystem/state /opt/WeatherAlertSystem/config.yaml
+chmod -R u+rwX,g+rwX /opt/WeatherAlertSystem/state
+systemctl restart weather-alert-system
+```
+
+Running `./install.sh --disable-helper-services` also repairs these permissions in version 1.0.2 and newer.
+
+
+### Stale helper cleanup
+
+Weather Alert System starts one managed Analog_Bridge, MMDVM_Bridge, and md380-emu helper chain per enabled group. On startup it cleans stale helper processes that reference its generated `state/bridges` directory, and the systemd unit uses `KillMode=control-group` so child helpers stop with the service. This behavior is enabled by default with `output.managed_openbridge.cleanup_stale_helpers: true`.

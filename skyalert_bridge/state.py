@@ -18,8 +18,14 @@ class StateStore:
     def load(cls, path: Path) -> "StateStore":
         if not path.exists():
             return cls(path=path, data={"groups": {}})
-        with path.open("r", encoding="utf-8") as handle:
-            data = json.load(handle)
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except PermissionError as exc:
+            raise RuntimeError(
+                f"Cannot read state file {path}. Fix ownership with: "
+                f"sudo chown -R skyalert:skyalert {path.parent}"
+            ) from exc
         if not isinstance(data, dict):
             data = {"groups": {}}
         data.setdefault("groups", {})
