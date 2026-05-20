@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weather-alert-system"
+version = "1.0.1"
+description = "Weather Alert System with managed DVSwitch/OpenBridge output"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "GPL-3.0-or-later"}
+authors = [{name = "Weather Alert System maintainers"}]
+dependencies = [
+  "PyYAML>=6.0",
+  "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+direct-openbridge = [
+  "bitarray>=2.8.0",
+  "dmr-utils3>=0.1.30",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+weather-alert-system = "skyalert_bridge.cli:main"
+skyalert-bridge = "skyalert_bridge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["skyalert_bridge*"]

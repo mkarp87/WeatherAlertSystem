@@ -1,0 +1,18 @@
+[Unit]
+Description=Weather Alert System
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skyalert
+Group=skyalert
+WorkingDirectory=/opt/WeatherAlertSystem
+ExecStart=/opt/WeatherAlertSystem/.venv/bin/weather-alert-system -c /opt/WeatherAlertSystem/config.yaml run
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

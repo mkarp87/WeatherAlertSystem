@@ -1,0 +1,60 @@
+app:
+  poll_interval_seconds: 60
+  user_agent: "WeatherAlertSystem/1.0 info@nc4es.org"
+  dry_run: false
+  # Queue used by the running service for manual test transmissions.
+  control_dir: ./state/control
+
+nws:
+  included_events: []
+  excluded_events: ["Test Message"]
+
+openbridge:
+  target_ip: "10.255.0.254"
+  target_port: 54097
+  passphrase: "EMERGENCY"
+  network_id: 31000182
+
+station:
+  callsign: "NC4ES"
+  source_id: 1234567
+  repeater_id: 31000182
+  slot: 1
+  color_code: 1
+
+internal_ports:
+  start: 43000
+  # Optional end keeps the auto-scanner inside this range. The app skips busy blocks.
+  end: 44999
+  step: 10
+
+groups:
+  - name: ARC125
+    enabled: true
+    county_codes: [ARC125]
+    talkgroup: 28515
+
+  - name: ARC119
+    enabled: false
+    county_codes: [ARC119]
+    talkgroup: 119
+
+  - name: ARC200_ARC201
+    enabled: false
+    county_codes: [ARC200, ARC201]
+    talkgroup: 201
+
+# Higher-quality TTS. This is the SkyDescribe-compatible VoiceRSS path.
+# Store the API key locally; do not commit it to a public repo.
+SkyDescribe:
+  APIKey: "CHANGE_ME_VOICERSS_API_KEY"
+  Language: en-us
+  Speed: 0
+  Voice: John
+  MaxWords: 300
+
+tts:
+  # Use voice_rss for SkyDescribe/VoiceRSS audio, or espeak for offline local TTS.
+  backend: voice_rss
+  voice: "en-us"
+  speed_wpm: 145

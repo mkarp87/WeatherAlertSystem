@@ -1,0 +1,360 @@
+# Example: one Weather Alert System service manages isolated DVSwitch-style chains per alert group.
+# Each group gets separate USRP, AMBE TLV, MMDVM local, HBLink master, OpenBridge local, and md380-emu ports.
+# External binaries are not bundled; adjust /opt paths for your installation.
+
+app:
+  poll_interval_seconds: 60
+  state_file: ./state/skyalert_state.json
+  audio_dir: ./state/audio
+  log_level: INFO
+  user_agent: "WeatherAlertSystem/1.0 CHANGE_ME@example.com"
+  dry_run: false
+
+nws:
+  api_base: "https://api.weather.gov"
+  request_timeout_seconds: 15
+  max_alerts_per_group: 6
+  include_events: []
+  exclude_events: ["Test Message"]
+  severity_rank:
+    Extreme: 0
+    Severe: 1
+    Moderate: 2
+    Minor: 3
+    Unknown: 4
+
+announcements:
+  say_new_alerts: true
+  say_changed_alerts: true
+  say_all_clear: true
+  include_description: false
+  include_instruction: true
+  max_text_chars: 900
+  intro: "Skywarn alert"
+  all_clear_text: "All clear. No active weather alerts remain for {group}."
+
+output:
+  mode: managed_dvswitch
+  concurrent_streams: 3
+  analog_bridge_usrp:
+    address: "127.0.0.1"
+    tx_port: 34001
+    local_rx_port: 32001
+    register: true
+    sample_rate: 8000
+    frame_ms: 20
+    slot: 2
+    color_code: 1
+    subscriber_id: 1234567
+    repeater_id: 123456789
+    callsign: "N0CALL"
+    pre_tx_commands: ["ambeMode=DMR"]
+  direct_openbridge:
+    local_ip: "0.0.0.0"
+    local_port: 62035
+    target_ip: "unused-in-managed-mode"
+    target_port: 62035
+    passphrase: "unused"
+    network_id: 3129100
+    source_id: 3120101
+    peer_id: 3129100
+    slot: 1
+    color_code: 1
+    frame_interval_ms: 60
+    silence_ambe72_hex: "000000000000000000"
+
+encoder:
+  backend: external_ambe72
+  command: "python3 ./tools/wav_to_ambe72_stub.py --input {wav} --format hex"
+  output_format: hex_lines
+  frame_size: 9
+  timeout_seconds: 120
+
+tts:
+  backend: espeak
+  espeak_command: espeak-ng
+  voice: "en-us"
+  speed_wpm: 145
+  amplitude: 120
+  command: null
+  voice_rss:
+    api_key: null
+    voice: "John"
+    language: "en-us"
+
+audio:
+  target_sample_rate: 8000
+  target_channels: 1
+  target_sample_width_bytes: 2
+  converter: auto
+  normalize: false
+
+groups:
+  - name: ARC125
+    enabled: true
+    county_codes: [ARC125]
+    talkgroup: 125
+    bridge:
+      startup_delay_seconds: 5.0
+      usrp:
+        tx_port: 34001
+        local_rx_port: 32001
+        subscriber_id: 1234567
+        repeater_id: 123456789
+        callsign: "N0CALL"
+        slot: 2
+        color_code: 1
+      variables:
+        md380emu_port: 2470
+        ab_ambe_tx_port: 31103
+        ab_ambe_rx_port: 31100
+        mmdvm_local_port: 62032
+        hbp_master_port: 54000
+        hbp_password: "CHANGE_ME_HBP_PASSWORD"
+        openbridge_local_port: 62035
+        openbridge_target_ip: "CHANGE_ME_OPENBRIDGE_HOST"
+        openbridge_target_port: 62035
+        openbridge_network_id: 3129125
+        openbridge_passphrase: "CHANGE_ME_OPENBRIDGE_SECRET"
+        report_port: 4321
+      files: &managed_files
+        - path: "{analog_bridge_ini}"
+          content: |
+            [GENERAL]
+            logLevel = 2
+            exportMetadata = true
+            decoderFallBack = true
+            useEmulator = true
+            emulatorAddress = 127.0.0.1:{md380emu_port}
+
+            [AMBE_AUDIO]
+            address = 127.0.0.1
+            txPort = {ab_ambe_tx_port}
+            rxPort = {ab_ambe_rx_port}
+            ambeMode = DMR
+            minTxTimeMS = 2500
+            gatewayDmrId = {subscriber_id}
+            repeaterID = {repeater_id}
+            txTg = {talkgroup}
+            txTs = {slot}
+            colorCode = {color_code}
+
+            [USRP]
+            address = {usrp_address}
+            txPort = {usrp_local_rx_port}
+            rxPort = {usrp_tx_port}
+            usrpAudio = AUDIO_UNITY
+            usrpGain = 1.10
+            tlvAudio = AUDIO_UNITY
+            tlvGain = 0.35
+
+        - path: "{dvswitch_ini}"
+          content: |
+            [DMR]
+            address = 127.0.0.1
+            txPort = {ab_ambe_rx_port}
+            rxPort = {ab_ambe_tx_port}
+            slot = {slot}
+            exportTG = {talkgroup}
+            hangTimerInFrames = 0
+
+        - path: "{mmdvm_bridge_ini}"
+          content: |
+            [General]
+            Callsign={callsign}
+            Id={subscriber_id}
+            Timeout=180
+            Duplex=0
+
+            [Info]
+            RXFrequency=000000000
+            TXFrequency=000000000
+            Power=1
+            Latitude=0.0000
+            Longitude=0.0000
+            Height=0
+            Location=Weather Alert System
+            Description=Weather Alert System {group}
+            URL=https://groups.io/g/DVSwitch
+
+            [Log]
+            DisplayLevel=1
+            FileLevel=2
+            FilePath={bridge_dir}
+            FileRoot=MMDVM_Bridge
+
+            [Modem]
+            Port=/dev/null
+            RSSIMappingFile=/dev/null
+            Trace=0
+            Debug=0
+
+            [DMR]
+            Enable=1
+            ColorCode={color_code}
+            EmbeddedLCOnly=1
+            DumpTAData=0
+
+            [DMR Network]
+            Enable=1
+            Address=127.0.0.1
+            Port={hbp_master_port}
+            Local={mmdvm_local_port}
+            Password={hbp_password}
+            Slot1=1
+            Slot2=1
+            Debug=0
+
+            [D-Star]
+            Enable=0
+            [System Fusion]
+            Enable=0
+            [P25]
+            Enable=0
+            [NXDN]
+            Enable=0
+
+        - path: "{hblink_cfg}"
+          content: |
+            [GLOBAL]
+            PATH: {bridge_dir}
+            PING_TIME: 5
+            MAX_MISSED: 3
+            USE_ACL: False
+            REG_ACL: PERMIT:ALL
+            SUB_ACL: PERMIT:ALL
+            TGID_TS1_ACL: PERMIT:ALL
+            TGID_TS2_ACL: PERMIT:ALL
+
+            [REPORTS]
+            REPORT: False
+            REPORT_INTERVAL: 60
+            REPORT_PORT: {report_port}
+            REPORT_CLIENTS: 127.0.0.1
+
+            [LOGGER]
+            LOG_FILE: {bridge_dir}/hblink.log
+            LOG_HANDLERS: console-timed
+            LOG_LEVEL: INFO
+            LOG_NAME: HBlink-{group}
+
+            [ALIASES]
+            TRY_DOWNLOAD: False
+            PATH: {bridge_dir}
+            PEER_FILE: peer_ids.json
+            SUBSCRIBER_FILE: subscriber_ids.json
+            TGID_FILE: talkgroup_ids.json
+            PEER_URL: https://www.radioid.net/static/rptrs.json
+            SUBSCRIBER_URL: https://www.radioid.net/static/users.json
+            STALE_DAYS: 7
+
+            [OBP-{group}]
+            MODE: OPENBRIDGE
+            ENABLED: True
+            IP:
+            PORT: {openbridge_local_port}
+            NETWORK_ID: {openbridge_network_id}
+            PASSPHRASE: {openbridge_passphrase}
+            TARGET_IP: {openbridge_target_ip}
+            TARGET_PORT: {openbridge_target_port}
+            BOTH_SLOTS: True
+            USE_ACL: False
+            SUB_ACL: PERMIT:ALL
+            TGID_ACL: PERMIT:{talkgroup}
+
+            [MASTER-{group}]
+            MODE: MASTER
+            ENABLED: True
+            REPEAT: True
+            MAX_PEERS: 3
+            EXPORT_AMBE: False
+            IP:
+            PORT: {hbp_master_port}
+            PASSPHRASE: {hbp_password}
+            GROUP_HANGTIME: 5
+            USE_ACL: False
+            REG_ACL: PERMIT:ALL
+            SUB_ACL: PERMIT:ALL
+            TGID_TS1_ACL: PERMIT:{talkgroup}
+            TGID_TS2_ACL: PERMIT:{talkgroup}
+
+        - path: "{rules_py}"
+          content: |
+            BRIDGES = {{
+                'SKYALERT-{group}': [
+                    {{'SYSTEM': 'MASTER-{group}', 'TS': {slot}, 'TGID': {talkgroup}, 'ACTIVE': True, 'TIMEOUT': 0, 'TO_TYPE': 'NONE', 'ON': [], 'OFF': [], 'RESET': []}},
+                    {{'SYSTEM': 'OBP-{group}', 'TS': 1, 'TGID': {talkgroup}, 'ACTIVE': True, 'TIMEOUT': 0, 'TO_TYPE': 'NONE', 'ON': [], 'OFF': [], 'RESET': []}},
+                ],
+            }}
+            UNIT = []
+
+      processes: &managed_processes
+        - name: md380-emu
+          command: "/opt/md380-emu/md380-emu -S {md380emu_port}"
+        - name: hblink3
+          command: "python3 /opt/hblink3/bridge.py -c {hblink_cfg} -r {rules_py}"
+        - name: mmdvm_bridge
+          shell: true
+          command: "DVSWITCH={dvswitch_ini} /opt/MMDVM_Bridge/MMDVM_Bridge {mmdvm_bridge_ini}"
+        - name: analog_bridge
+          command: "/opt/Analog_Bridge/Analog_Bridge {analog_bridge_ini}"
+
+  - name: ARC119
+    enabled: true
+    county_codes: [ARC119]
+    talkgroup: 119
+    bridge:
+      startup_delay_seconds: 5.0
+      usrp:
+        tx_port: 34011
+        local_rx_port: 32011
+        subscriber_id: 1234567
+        repeater_id: 123456789
+        callsign: "N0CALL"
+        slot: 2
+        color_code: 1
+      variables:
+        md380emu_port: 2471
+        ab_ambe_tx_port: 31203
+        ab_ambe_rx_port: 31200
+        mmdvm_local_port: 62042
+        hbp_master_port: 54010
+        hbp_password: "CHANGE_ME_HBP_PASSWORD"
+        openbridge_local_port: 62045
+        openbridge_target_ip: "CHANGE_ME_OPENBRIDGE_HOST"
+        openbridge_target_port: 62035
+        openbridge_network_id: 3129119
+        openbridge_passphrase: "CHANGE_ME_OPENBRIDGE_SECRET"
+        report_port: 4331
+      files: *managed_files
+      processes: *managed_processes
+
+  - name: ARC200_ARC201
+    enabled: true
+    county_codes: [ARC200, ARC201]
+    talkgroup: 201
+    bridge:
+      startup_delay_seconds: 5.0
+      usrp:
+        tx_port: 34021
+        local_rx_port: 32021
+        subscriber_id: 1234567
+        repeater_id: 123456789
+        callsign: "N0CALL"
+        slot: 2
+        color_code: 1
+      variables:
+        md380emu_port: 2472
+        ab_ambe_tx_port: 31303
+        ab_ambe_rx_port: 31300
+        mmdvm_local_port: 62052
+        hbp_master_port: 54020
+        hbp_password: "CHANGE_ME_HBP_PASSWORD"
+        openbridge_local_port: 62055
+        openbridge_target_ip: "CHANGE_ME_OPENBRIDGE_HOST"
+        openbridge_target_port: 62035
+        openbridge_network_id: 3129201
+        openbridge_passphrase: "CHANGE_ME_OPENBRIDGE_SECRET"
+        report_port: 4341
+      files: *managed_files
+      processes: *managed_processes

@@ -1,0 +1,10 @@
+Weather Alert System is provided under the GNU General Public License version 3 or later.
+See COPYING for the full GPL-3.0 text.
+
+This package intentionally does not vendor SkywarnPlus, HBLink3, Analog_Bridge,
+MMDVM_Bridge, md380-emu, or any proprietary AMBE implementation.
+
+The direct OpenBridge packetizer uses the public HomeBrew/OpenBridge packet layout
+and depends on dmr-utils3 for DMR link-control/FEC construction when direct DMR
+packet generation is enabled. dmr-utils3 and HBLink3 are GPL-family projects; keep
+this package GPL-compatible if you redistribute modified versions.

@@ -1,0 +1,118 @@
+# Weather Alert System simplified configuration.
+# Groups only need name/enabled/county_codes/talkgroup. Optional per-group dmr_id overrides the subscriber/source ID.
+# The app auto-generates local Analog_Bridge, MMDVM_Bridge, md380-emu, and OpenBridge wiring.
+
+app:
+  poll_interval_seconds: 60
+  user_agent: "WeatherAlertSystem/1.0.1 CHANGE_ME@example.com"
+  log_level: INFO
+  dry_run: false
+  # Queue used by the running service for manual test transmissions.
+  control_dir: ./state/control
+
+# Global NWS event filtering. Empty included_events means all events are allowed unless excluded.
+# See docs/EventTypes.md for the full SkyWarnPlus-compatible NWS v1.2 event list.
+nws:
+  included_events: []
+  excluded_events:
+    - "Test Message"
+  max_alerts_per_group: 6
+
+# Explicit no-repeat behavior. Unchanged active alerts are ignored on each poll.
+alert_repeat:
+  enabled: false
+  unchanged_policy: ignore
+  repeat_after_minutes: 0
+
+# The spoken WAV contains the full alert by default.
+announcements:
+  include_description: true
+  include_instruction: true
+  max_text_chars: 4000
+  intro: "Skywarn alert"
+  # SkyWarnPlus/SkyDescribe-style cleanup removes asterisks, collapses whitespace,
+  # expands common weather abbreviations, and smooths ellipses before TTS.
+  text_cleanup_enabled: true
+
+# Optional global audio tail appended to every alert and queued test message.
+tail_message:
+  enabled: false
+  text: "This is NC4ES weather alert."
+
+# Shared remote OpenBridge listener. All groups use this same UDP target.
+openbridge:
+  target_ip: "CHANGE_ME_OPENBRIDGE_HOST"
+  target_port: CHANGEME-port
+  passphrase: "CHANGE_ME_OPENBRIDGE_SECRET"
+  network_id: 12345
+  # Optional. Use 0 to let the OS choose the local source port.
+  local_ip: "0.0.0.0"
+  local_port: 0
+
+# Local DMR identity used inside the managed Analog_Bridge/MMDVM_Bridge chain.
+# These are global defaults. In managed_openbridge mode the app automatically
+# offsets source_id and repeater_id by group index. Analog_Bridge requires the
+# subscriber/source ID and repeaterID to be different. The OpenBridge SRC_ID
+# remains global from openbridge.network_id.
+station:
+  callsign: "N0CALL"
+  source_id: 1234567
+  repeater_id: CHAGEMEREPEATERID
+  slot: 1
+  color_code: 1
+
+
+# Audio scheduler. Different groups can transmit at the same time when they
+# have separate managed bridge chains; requests for the same group are queued.
+audio_scheduler:
+  mode: parallel_by_group
+  max_concurrent_groups: 4
+  same_group_policy: queue
+
+# One internal port range is enough. The app allocates ports inside this range.
+internal_ports:
+  start: 43000
+  # Optional end keeps the auto-scanner inside this range. The app skips busy blocks.
+  end: 44999
+  step: 10
+
+# Usually leave these as auto. Set explicit paths only if doctor cannot find them.
+helpers:
+  analog_bridge: auto
+  mmdvm_bridge: auto
+  md380_emu: auto
+  md380_emu_args: "-S {md380emu_port}"
+  md380_emu_wrapper: auto  # auto uses /opt/md380-emu/qemu-arm-static when present
+  md380_emu_workdir: auto  # auto uses the md380-emu directory
+
+# Higher-quality TTS. This is the SkyDescribe-compatible VoiceRSS path.
+# Store the API key locally; do not commit it to a public repo.
+SkyDescribe:
+  APIKey: "CHANGE_ME_VOICERSS_API_KEY"
+  Language: en-us
+  Speed: 0
+  Voice: John
+  MaxWords: 300
+
+tts:
+  # Use voice_rss for SkyDescribe/VoiceRSS audio, or espeak for offline local TTS.
+  backend: voice_rss
+  voice: "en-us"
+  speed_wpm: 145
+
+# Only this section should normally grow as you add areas.
+# See docs/CountyCodes.md for county code guidance.
+groups:
+  - name: GROUP1
+    enabled: true
+    county_codes: [ARC125]
+    talkgroup: 123
+    # Optional subscriber/source ID override. Omit to use station.source_id + group index.
+    # repeater_id and mmdvm_id normally default to station.repeater_id + group index.
+    # dmr_id: 310001
+
+  - name: GROUP2
+    enabled: false
+    county_codes: [ARC119]
+    talkgroup: 345
+
