@@ -43,7 +43,7 @@ On a Debian/Ubuntu-style system:
 
 ```bash
 cd /opt
-unzip weather_alert_system_v1_0.zip
+git clone https://github.com/mkarp87/WeatherAlertSystem.git
 cd WeatherAlertSystem
 sudo ./install.sh
 ```
