@@ -115,18 +115,81 @@ class USRPClient:
 
     def stream_wav(self, wav_path: Path, talkgroup: int) -> tuple[int, int]:
         frame_samples = int(self.cfg.sample_rate * self.cfg.frame_ms / 1000)
-        delay = self.cfg.frame_ms / 1000.0
+        frame_interval = self.cfg.frame_ms / 1000.0
         first = True
         packets = 0
         bytes_sent = 0
+        late_5ms = 0
+        late_10ms = 0
+        late_frame = 0
+        max_lateness = 0.0
+        started = time.monotonic()
+        next_send = started
+
         for chunk in read_pcm_chunks(wav_path, frame_samples):
-            bytes_sent += self.send_packet(USRP_TYPE_VOICE, chunk, keyup=1, talkgroup=talkgroup)
+            now = time.monotonic()
+            remaining = next_send - now
+            if remaining > 0:
+                time.sleep(remaining)
+                now = time.monotonic()
+
+            lateness = max(0.0, now - next_send)
+            max_lateness = max(max_lateness, lateness)
+            if lateness >= 0.005:
+                late_5ms += 1
+            if lateness >= 0.010:
+                late_10ms += 1
+            if lateness >= frame_interval:
+                late_frame += 1
+                logger.warning(
+                    "USRP TX missed frame deadline by %.1f ms for TG %s (frame %s)",
+                    lateness * 1000.0,
+                    talkgroup,
+                    packets + 1,
+                )
+
+            bytes_sent += self.send_packet(
+                USRP_TYPE_VOICE,
+                chunk,
+                keyup=1,
+                talkgroup=talkgroup,
+            )
             packets += 1
+
             if first:
                 logger.debug("Started USRP TX for TG %s", talkgroup)
                 first = False
-            time.sleep(delay)
-        # One explicit unkey packet with silence.
-        bytes_sent += self.send_packet(USRP_TYPE_VOICE, b"\x00\x00" * frame_samples, keyup=0, talkgroup=talkgroup)
+
+            # Advance from the ideal timeline rather than sleeping a full frame
+            # after send_packet(). This prevents processing/scheduler overhead
+            # from accumulating and starving Analog_Bridge during long messages.
+            next_send += frame_interval
+
+        # Pace the unkey packet at the next frame boundary so the final audio
+        # frame gets its complete playout interval.
+        remaining = next_send - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+
+        bytes_sent += self.send_packet(
+            USRP_TYPE_VOICE,
+            b"\x00\x00" * frame_samples,
+            keyup=0,
+            talkgroup=talkgroup,
+        )
         packets += 1
+
+        elapsed = time.monotonic() - started
+        logger.info(
+            "USRP TX timing TG %s: audio_frames=%s elapsed=%.3fs max_late=%.1fms "
+            "late_5ms=%s late_10ms=%s late_frame=%s",
+            talkgroup,
+            max(0, packets - 1),
+            elapsed,
+            max_lateness * 1000.0,
+            late_5ms,
+            late_10ms,
+            late_frame,
+        )
+
         return packets, bytes_sent
